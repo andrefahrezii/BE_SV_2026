@@ -1,0 +1,362 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Sharing Vision Backend API",
+    "description": "REST API untuk use case Post Article - Sharing Vision 2023\n\n## Fitur\n- Autentikasi JWT (login/register)\n- CRUD Artikel (admin)\n- CRUD Kategori (admin)\n- Public article listing dengan pagination, search, filter kategori\n- Public article detail\n- Dashboard stats\n- Audit log\n- Rate limiting (public & admin)\n- Redis caching\n- Full-text search dengan PostgreSQL FTS",
+    "version": "2.0.0",
+    "contact": {
+      "name": "Sharing Vision",
+      "url": "https://sharingvision.id"
+    }
+  },
+  "servers": [
+    { "url": "http://localhost:8081/api/v1", "description": "Development" },
+    { "url": "https://be.antasource.xyz/api/v1", "description": "Production" }
+  ],
+  "components": {
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string" }
+        }
+      },
+      "Article": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "title": { "type": "string", "minLength": 20 },
+          "content": { "type": "string", "minLength": 200 },
+          "category": { "type": "string", "minLength": 3 },
+          "status": { "type": "string", "enum": ["publish", "draft", "thrash"] },
+          "created_date": { "type": "string", "format": "date-time" },
+          "updated_date": { "type": "string", "format": "date-time" },
+          "author_id": { "type": "integer" }
+        }
+      },
+      "CreateArticleRequest": {
+        "type": "object",
+        "required": ["title", "content", "category", "status"],
+        "properties": {
+          "title": { "type": "string", "minLength": 20, "example": "Belajar Golang untuk Pemula" },
+          "content": { "type": "string", "minLength": 200, "example": "Golang adalah bahasa pemrograman yang dikembangkan oleh Google..." },
+          "category": { "type": "string", "minLength": 3, "example": "Teknologi" },
+          "status": { "type": "string", "enum": ["publish", "draft", "thrash"] }
+        }
+      },
+      "UpdateArticleRequest": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string", "minLength": 20 },
+          "content": { "type": "string", "minLength": 200 },
+          "category": { "type": "string", "minLength": 3 },
+          "status": { "type": "string", "enum": ["publish", "draft", "thrash"] }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "required": ["email", "password"],
+        "properties": {
+          "email": { "type": "string", "format": "email", "example": "admin@sharingvision.id" },
+          "password": { "type": "string", "minLength": 6, "example": "admin123" }
+        }
+      },
+      "LoginResponse": {
+        "type": "object",
+        "properties": {
+          "token": { "type": "string" },
+          "user": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "integer" },
+              "email": { "type": "string" },
+              "role": { "type": "string" }
+            }
+          }
+        }
+      },
+      "Category": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "name": { "type": "string", "minLength": 3, "maxLength": 100 },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "CreateCategoryRequest": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "minLength": 3, "maxLength": 100, "example": "Teknologi" }
+        }
+      }
+    },
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "security": [{ "BearerAuth": [] }],
+  "paths": {
+    "/auth/login": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Login pengguna",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/LoginRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Login berhasil", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LoginResponse" } } } },
+          "401": { "description": "Invalid credentials", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/auth/register": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Register pengguna baru",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password", "role"],
+                "properties": {
+                  "email": { "type": "string", "format": "email" },
+                  "password": { "type": "string", "minLength": 6 },
+                  "role": { "type": "string", "enum": ["admin", "user"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Registrasi berhasil" },
+          "409": { "description": "Email already registered" }
+        }
+      }
+    },
+    "/articles": {
+      "get": {
+        "tags": ["Articles (Public)"],
+        "summary": "List artikel published dengan pagination, search, filter kategori",
+        "security": [],
+        "parameters": [
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 10 } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer", "default": 0 } },
+          { "name": "q", "in": "query", "schema": { "type": "string" }, "description": "Search query (full-text search)" },
+          { "name": "category", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "List artikel",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": { "type": "array", "items": { "$ref": "#/components/schemas/Article" } },
+                    "total": { "type": "integer" },
+                    "categories": { "type": "array", "items": { "type": "string" } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/articles/page/{limit}/{offset}": {
+      "get": {
+        "tags": ["Articles (Public)"],
+        "summary": "List artikel dengan path-based pagination",
+        "security": [],
+        "parameters": [
+          { "name": "limit", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "offset", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": { "200": { "description": "List artikel" } }
+      }
+    },
+    "/articles/{id}": {
+      "get": {
+        "tags": ["Articles (Public)"],
+        "summary": "Detail artikel by ID",
+        "security": [],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "Detail artikel", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Article" } } } },
+          "404": { "description": "Not found" }
+        }
+      }
+    },
+    "/categories": {
+      "get": {
+        "tags": ["Categories (Public)"],
+        "summary": "List semua kategori (public)",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "List kategori",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": { "type": "array", "items": { "$ref": "#/components/schemas/Category" } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/articles": {
+      "get": {
+        "tags": ["Articles (Admin)"],
+        "summary": "List semua artikel (admin)",
+        "parameters": [
+          { "name": "limit", "in": "query", "schema": { "type": "integer" } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer" } },
+          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["publish", "draft", "thrash"] } },
+          { "name": "q", "in": "query", "schema": { "type": "string" } },
+          { "name": "category", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "List artikel" } }
+      },
+      "post": {
+        "tags": ["Articles (Admin)"],
+        "summary": "Buat artikel baru",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateArticleRequest" } } }
+        },
+        "responses": {
+          "201": { "description": "Artikel berhasil dibuat" },
+          "400": { "description": "Validation error" }
+        }
+      }
+    },
+    "/admin/articles/{id}": {
+      "get": {
+        "tags": ["Articles (Admin)"],
+        "summary": "Detail artikel by ID (admin)",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Detail artikel" }, "404": { "description": "Not found" } }
+      },
+      "put": {
+        "tags": ["Articles (Admin)"],
+        "summary": "Update artikel",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": {
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateArticleRequest" } } }
+        },
+        "responses": { "200": { "description": "Artikel berhasil diupdate" } }
+      },
+      "delete": {
+        "tags": ["Articles (Admin)"],
+        "summary": "Soft-delete artikel (pindahkan ke thrash)",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Artikel dipindahkan ke thrash" } }
+      }
+    },
+    "/admin/categories": {
+      "get": {
+        "tags": ["Categories (Admin)"],
+        "summary": "List semua kategori (admin)",
+        "responses": { "200": { "description": "List kategori" } }
+      },
+      "post": {
+        "tags": ["Categories (Admin)"],
+        "summary": "Tambah kategori baru",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateCategoryRequest" } } }
+        },
+        "responses": {
+          "201": { "description": "Kategori berhasil dibuat" },
+          "409": { "description": "Category already exists" }
+        }
+      }
+    },
+    "/admin/categories/{id}": {
+      "get": {
+        "tags": ["Categories (Admin)"],
+        "summary": "Detail kategori by ID",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Detail kategori" }, "404": { "description": "Not found" } }
+      },
+      "put": {
+        "tags": ["Categories (Admin)"],
+        "summary": "Update kategori",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateCategoryRequest" } } }
+        },
+        "responses": { "200": { "description": "Kategori berhasil diupdate" } }
+      },
+      "delete": {
+        "tags": ["Categories (Admin)"],
+        "summary": "Hapus kategori",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Kategori berhasil dihapus" } }
+      }
+    },
+    "/admin/dashboard": {
+      "get": {
+        "tags": ["Dashboard"],
+        "summary": "Statistik dashboard (jumlah published, draft, thrash)",
+        "responses": {
+          "200": {
+            "description": "Statistik dashboard",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "stats": {
+                      "type": "object",
+                      "properties": {
+                        "published": { "type": "integer" },
+                        "draft": { "type": "integer" },
+                        "thrash": { "type": "integer" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/audit-logs": {
+      "get": {
+        "tags": ["Audit Logs"],
+        "summary": "List audit log",
+        "parameters": [
+          { "name": "limit", "in": "query", "schema": { "type": "integer" } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer" } },
+          { "name": "resource_type", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "List audit log" } }
+      }
+    }
+  }
+}

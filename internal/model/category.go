@@ -1,0 +1,18 @@
+package model
+
+import "time"
+
+type Category struct {
+	ID        int       `json:"id"`
+	Name      string    `json:"name"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type CreateCategoryRequest struct {
+	Name string `json:"name" binding:"required,min=3,max=100"`
+}
+
+type UpdateCategoryRequest struct {
+	Name string `json:"name" binding:"required,min=3,max=100"`
+}

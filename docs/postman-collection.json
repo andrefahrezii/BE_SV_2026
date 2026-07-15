@@ -1,0 +1,297 @@
+{
+  "info": {
+    "name": "Sharing Vision Backend v2",
+    "description": "Complete API collection for Sharing Vision Backend\n\n## Setup\n1. Import this collection to Postman\n2. Set variable `base_url` to `http://localhost:8081/api/v1`\n3. Run Login request to auto-set `admin_token` variable\n\n## Endpoints\n- Auth: Login, Register\n- Public: Articles list (with search & filter), Article detail, Categories\n- Admin: Articles CRUD, Categories CRUD, Dashboard stats, Audit logs",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.token) {",
+                  "  pm.collectionVariables.set('admin_token', jsonData.token);",
+                  "  console.log('Token saved:', jsonData.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@sharingvision.id\",\n  \"password\": \"admin123\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "register"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"rahasia123\",\n  \"role\": \"admin\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Public Articles",
+      "item": [
+        {
+          "name": "List Articles",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/articles?category=Tech&q=golang&limit=10&offset=0",
+              "host": ["{{base_url}}"],
+              "path": ["articles"],
+              "query": [
+                { "key": "category", "value": "Tech" },
+                { "key": "q", "value": "golang" },
+                { "key": "limit", "value": "10" },
+                { "key": "offset", "value": "0" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Articles (Path Pagination)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/articles/page/10/0",
+              "host": ["{{base_url}}"],
+              "path": ["articles", "page", "10", "0"]
+            }
+          }
+        },
+        {
+          "name": "Get Article By ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/articles/1",
+              "host": ["{{base_url}}"],
+              "path": ["articles", "1"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Public Categories",
+      "item": [
+        {
+          "name": "List Categories",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/categories",
+              "host": ["{{base_url}}"],
+              "path": ["categories"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin Articles",
+      "item": [
+        {
+          "name": "Create Article",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/admin/articles",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "articles"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Belajar Golang untuk Pemula 2023\",\n  \"content\": \"Golang atau Go adalah bahasa pemrograman yang dikembangkan oleh Google pada tahun 2009. Bahasa ini dirancang untuk mengatasi kelemahan bahasa pemrograman lain seperti C++ dan Java dalam hal konkurensi dan skalabilitas. Dengan sintaks yang sederhana dan performa yang cepat, Golang menjadi pilihan populer untuk membangun aplikasi backend, microservices, dan tools CLI. Dalam artikel ini, kita akan membahas dasar-dasar Golang mulai dari instalasi, struktur kode, tipe data, hingga pembuatan API sederhana menggunakan framework Gin.\",\n  \"category\": \"Teknologi\",\n  \"status\": \"publish\"\n}"
+            }
+          }
+        },
+        {
+          "name": "List Admin Articles",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/admin/articles?limit=10&offset=0&status=publish",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "articles"],
+              "query": [
+                { "key": "limit", "value": "10" },
+                { "key": "offset", "value": "0" },
+                { "key": "status", "value": "publish" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Article",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/admin/articles/1",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "articles", "1"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Belajar Golang untuk Pemula 2023 - Updated\",\n  \"status\": \"publish\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Article (Move to Trash)",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/admin/articles/1",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "articles", "1"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin Categories",
+      "item": [
+        {
+          "name": "Create Category",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/admin/categories",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "categories"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Teknologi\"\n}"
+            }
+          }
+        },
+        {
+          "name": "List Categories",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/admin/categories",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "categories"]
+            }
+          }
+        },
+        {
+          "name": "Update Category",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/admin/categories/1",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "categories", "1"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Teknologi Informasi\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Category",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/admin/categories/1",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "categories", "1"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "item": [
+        {
+          "name": "Dashboard Stats",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/admin/dashboard",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "dashboard"]
+            }
+          }
+        },
+        {
+          "name": "Audit Logs",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/admin/audit-logs?limit=20&offset=0",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "audit-logs"],
+              "query": [
+                { "key": "limit", "value": "20" },
+                { "key": "offset", "value": "0" }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8081/api/v1" },
+    { "key": "admin_token", "value": "" }
+  ]
+}
