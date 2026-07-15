@@ -14,6 +14,7 @@ func RunMigrations(dbConn *sql.DB) error {
 	files := []string{
 		"migrations/001_initial_schema.sql",
 		"migrations/002_categories.sql",
+		"migrations/003_fix_audit_log_action.sql",
 	}
 	for _, f := range files {
 		schema, err := os.ReadFile(f)

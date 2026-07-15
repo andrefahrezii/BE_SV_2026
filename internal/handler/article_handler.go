@@ -9,6 +9,7 @@ import (
 	"github.com/you/sharing-vision-backend-v2/internal/service"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 type ArticleHandler struct {
@@ -65,30 +66,45 @@ func (h *ArticleHandler) Create(c *gin.Context) {
 }
 
 func (h *ArticleHandler) GetByID(c *gin.Context) {
-	id, _ := strconv.Atoi(c.Param("id"))
+	idStr := c.Param("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		config.Log.Warn("invalid article id", zap.String("id", idStr), zap.Error(err))
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
 	post, err := h.articleService.GetByID(id)
 	if err != nil {
+		config.Log.Error("article get by id failed", zap.Int("id", id), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	if post == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "article not found"})
 		return
 	}
 	c.JSON(http.StatusOK, post)
 }
 
 func (h *ArticleHandler) Update(c *gin.Context) {
-	id, _ := strconv.Atoi(c.Param("id"))
+	idStr := c.Param("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		config.Log.Warn("invalid article id for update", zap.String("id", idStr), zap.Error(err))
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
 	var req model.UpdatePostRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	oldPost, _ := h.articleService.GetByID(id)
-	if oldPost == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+	oldPost, err := h.articleService.GetByID(id)
+	if err != nil || oldPost == nil {
+		config.Log.Warn("article not found for update", zap.Int("id", id))
+		c.JSON(http.StatusNotFound, gin.H{"error": "article not found"})
 		return
 	}
 
@@ -111,22 +127,29 @@ func (h *ArticleHandler) Update(c *gin.Context) {
 	}
 
 	if err := h.articleService.Update(id, m); err != nil {
+		config.Log.Error("failed to update article", zap.Int("id", id), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	newPost, _ := h.articleService.GetByID(id)
+	newPost, err := h.articleService.GetByID(id)
+	if err != nil || newPost == nil {
+		config.Log.Error("failed to fetch updated article", zap.Int("id", id), zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load updated article"})
+		return
+	}
+
 	oldValues := map[string]any{
-		"title": oldPost.Title,
+		"title":    oldPost.Title,
 		"category": oldPost.Category,
-		"status": oldPost.Status,
+		"status":   oldPost.Status,
 	}
 	newValues := map[string]any{
-		"title": newPost.Title,
+		"title":    newPost.Title,
 		"category": newPost.Category,
-		"status": newPost.Status,
+		"status":   newPost.Status,
 	}
-	log := &model.AuditLog{
+	if err := h.articleService.CreateAuditLog(&model.AuditLog{
 		ActorUserID:  ptrInt(getUserID(c)),
 		Action:       "update",
 		ResourceType: "post",
@@ -135,17 +158,36 @@ func (h *ArticleHandler) Update(c *gin.Context) {
 		UserAgent:    c.Request.UserAgent(),
 		OldValues:    oldValues,
 		NewValues:    newValues,
+	}); err != nil {
+		config.Log.Error("failed to create audit log for update", zap.Int("id", id), zap.Error(err))
 	}
-	_ = h.articleService.CreateAuditLog(log)
 
 	c.JSON(http.StatusOK, gin.H{"message": "updated"})
 }
 
 func (h *ArticleHandler) Delete(c *gin.Context) {
-	id, _ := strconv.Atoi(c.Param("id"))
-	oldPost, _ := h.articleService.GetByID(id)
-	_ = h.articleService.Update(id, map[string]interface{}{"status": "thrash"})
-	_ = h.articleService.CreateAuditLog(&model.AuditLog{
+	idStr := c.Param("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		config.Log.Warn("invalid article id for delete", zap.String("id", idStr), zap.Error(err))
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
+	oldPost, err := h.articleService.GetByID(id)
+	if err != nil || oldPost == nil {
+		config.Log.Warn("article not found for delete", zap.Int("id", id))
+		c.JSON(http.StatusNotFound, gin.H{"error": "article not found"})
+		return
+	}
+
+	if err := h.articleService.Update(id, map[string]interface{}{"status": "thrash"}); err != nil {
+		config.Log.Error("failed to thrash article", zap.Int("id", id), zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.articleService.CreateAuditLog(&model.AuditLog{
 		ActorUserID:  ptrInt(getUserID(c)),
 		Action:       "thrash",
 		ResourceType: "post",
@@ -153,11 +195,14 @@ func (h *ArticleHandler) Delete(c *gin.Context) {
 		IPAddress:    c.ClientIP(),
 		UserAgent:    c.Request.UserAgent(),
 		OldValues: map[string]any{
-			"title": oldPost.Title,
+			"title":    oldPost.Title,
 			"category": oldPost.Category,
-			"status": oldPost.Status,
+			"status":   oldPost.Status,
 		},
-	})
+	}); err != nil {
+		config.Log.Error("failed to create audit log", zap.Int("id", id), zap.Error(err))
+	}
+
 	c.JSON(http.StatusOK, gin.H{"message": "moved to thrash"})
 }
 

@@ -79,6 +79,7 @@ func runServer() {
 	r.Use(cors.New(cors.Config{
 		AllowOrigins: []string{
 			"http://localhost:3000",
+			"http://localhost:3008",
 			"https://fdz.antasource.xyz",
 			"https://be.antasource.xyz",
 		},
