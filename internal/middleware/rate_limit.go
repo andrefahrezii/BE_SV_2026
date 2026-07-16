@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/you/sharing-vision-backend-v2/internal/config"
@@ -12,6 +13,7 @@ import (
 )
 
 type RateLimiter struct {
+	mu    sync.Mutex
 	store map[string]*rate.Limiter
 }
 
@@ -20,6 +22,9 @@ func NewRateLimiter() *RateLimiter {
 }
 
 func (rl *RateLimiter) getLimiter(ip string, rps int, burst int) *rate.Limiter {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
 	if limiter, ok := rl.store[ip]; ok {
 		return limiter
 	}
